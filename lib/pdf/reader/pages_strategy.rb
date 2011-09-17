@@ -197,7 +197,7 @@ class PDF::Reader
       'd1'  => :set_glyph_width_and_bounding_box,
       'Do'  => :invoke_xobject,
       'DP'  => :define_marked_content_with_pl,
-      'EI'  => :end_inline_image,
+      'EI'  => :invoke_inline_image,
       'EMC' => :end_marked_content,
       'ET'  => :end_text_object,
       'EX'  => :end_compatibility_section,

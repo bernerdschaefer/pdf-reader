@@ -37,6 +37,7 @@ class PDF::Reader
       "["  => proc { |parser, token| parser.send(:array) },
       "("  => proc { |parser, token| parser.send(:string) },
       "<"  => proc { |parser, token| parser.send(:hex_string) },
+      "BI" => proc { |parser, token| parser.send(:inline_image) },
 
       nil     => proc { nil },
       "true"  => proc { true },
@@ -50,7 +51,9 @@ class PDF::Reader
       ">>"        => TOKEN_STRATEGY,
       "]"         => TOKEN_STRATEGY,
       ">"         => TOKEN_STRATEGY,
-      ")"         => TOKEN_STRATEGY
+      ")"         => TOKEN_STRATEGY,
+      "ID"        => TOKEN_STRATEGY,
+      "EI"        => TOKEN_STRATEGY
     }
 
     ################################################################################
@@ -147,6 +150,26 @@ class PDF::Reader
       end
 
       a
+    end
+    ################################################################################
+    # Reads PDF inline data from the buffer and converts it to an instance of
+    # PDF::Reader::InlineImage.
+    def inline_image
+      dict = {}
+
+      loop do
+        key = parse_token
+        break if key.kind_of?(Token) and key == "ID"
+        raise MalformedPDFError, "Dictionary key (#{key.inspect}) is not a name" unless key.kind_of?(Symbol)
+
+        value = parse_token
+        value.kind_of?(Token) and Error.str_assert_not(value, "ID")
+        dict[key] = value
+      end
+
+      data = @buffer.token
+
+      InlineImage.new(dict, data)
     end
     ################################################################################
     # Reads a PDF hex string from the buffer and converts it to a Ruby String

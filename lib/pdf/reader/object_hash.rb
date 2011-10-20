@@ -1,4 +1,6 @@
 # coding: utf-8
+require "pdf/reader/reference"
+require "pdf/reader/stream"
 
 class PDF::Reader
   # Provides low level access to the objects in a PDF file via a hash-like
@@ -94,32 +96,77 @@ class PDF::Reader
     # object in the PDF and return it. Otherwise return key untouched.
     #
     def object(key)
-      key.is_a?(PDF::Reader::Reference) ? self[key] : key
+      PDF::Reader::Reference === key ? self[key] : key
     end
     alias :deref :object
+
+    DEREF_STRATEGIES = {
+      Reference => :deref_reference!,
+      Stream => :deref_stream!,
+      Hash => :deref_hash!,
+      Array => :deref_array!
+    }
 
     # Recursively dereferences the object refered to be +key+. If +key+ is not
     # a PDF::Reader::Reference, the key is returned unchanged.
     #
     def deref!(key)
-      case object = deref(key)
-
-        when Hash
-          object.each do |k, value|
-            object[k] = deref! value
-          end
-
-        when PDF::Reader::Stream
-          deref! object.hash
-
-        when Array
-          object.each_with_index do |value, index|
-            object[index] = deref! value
-          end
-
+      if strategy = DEREF_STRATEGIES[key.class]
+        send(strategy, key)
+      else
+        key
       end
+    end
 
-      object
+    # Recursively dereferences objects within an hash.
+    #
+    # @api private
+    # @param [Hash] hash the hash to dereference
+    # @return [Hash] the input hash with all Reference objects replaced.
+    def deref_hash!(hash)
+      hash.each do |k, v|
+        if strategy = DEREF_STRATEGIES[v.class]
+          hash[k] = send(strategy, v)
+        end
+      end
+    end
+
+    # Recursively dereferences objects within a PDF::Reader::Stream's hash.
+    #
+    # @api private
+    # @param [Stream] stream the stream to dereference
+    # @return [Stream] the input stream with all Reference objects replaced.
+    def deref_stream!(stream)
+      deref_hash! stream.hash
+      stream
+    end
+
+    # Recursively dereferences a PDF::Reader::Reference.
+    #
+    # @api private
+    # @param [Reference] ref the reference to deref
+    # @return the dereferenced value
+    def deref_reference!(ref)
+      value = self[ref]
+
+      if strategy = DEREF_STRATEGIES[value.class]
+        send(strategy, value)
+      else
+        value
+      end
+    end
+
+    # Recursively dereferences objects in an array.
+    #
+    # @api private
+    # @param [Array] array the array to dereference
+    # @return [Array] the input array with all Reference objects replaced
+    def deref_array!(array)
+      array.each_with_index do |value, index|
+        if strategy = DEREF_STRATEGIES[value.class]
+          array[index] = send(strategy, value)
+        end
+      end
     end
 
     # Access an object from the PDF. key can be an int or a PDF::Reader::Reference
